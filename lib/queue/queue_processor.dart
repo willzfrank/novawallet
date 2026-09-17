@@ -3,8 +3,10 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:uuid/uuid.dart';
 
+import '../core/money/money.dart';
 import '../core/network/connectivity_provider.dart';
 import '../core/network/mock_api_service.dart';
+import '../core/notifications/notification_service.dart';
 import '../core/storage/app_storage.dart';
 import '../features/save/save_provider.dart';
 import '../features/wallet/wallet_provider.dart';
@@ -12,6 +14,8 @@ import '../models/queued_action.dart';
 import '../models/transaction.dart';
 
 part 'queue_processor.g.dart';
+
+const int kMaxRetries = 3;
 
 @Riverpod(keepAlive: true)
 AppStorage appStorage(AppStorageRef ref) {
@@ -57,6 +61,15 @@ class QueueProcessor extends _$QueueProcessor {
         .length;
   }
 
+  int deadCount() {
+    return ref
+        .read(appStorageProvider)
+        .queueBox
+        .values
+        .where((a) => a.status == 'dead')
+        .length;
+  }
+
   void refreshCount() {
     state = _pendingCount(ref.read(appStorageProvider));
   }
@@ -99,6 +112,25 @@ class QueueProcessor extends _$QueueProcessor {
     return (action: action, queuedOffline: true);
   }
 
+  Future<void> retryDeadActions() async {
+    final storage = ref.read(appStorageProvider);
+    final dead = storage.queueBox.values
+        .where((a) => a.status == 'dead')
+        .toList();
+    for (final action in dead) {
+      storage.queueBox.put(
+        action.id,
+        action.copyWith(
+          status: 'pending',
+          retryCount: 0,
+          clearFailureReason: true,
+        ),
+      );
+    }
+    refreshCount();
+    await processPending();
+  }
+
   Future<void> processPending() async {
     if (_processing) {
       _rerunRequested = true;
@@ -138,10 +170,25 @@ class QueueProcessor extends _$QueueProcessor {
             await _applySideEffects(action);
             storage.queueBox.delete(action.id);
           } else {
-            storage.queueBox.put(
-              action.id,
-              action.copyWith(status: 'pending'),
-            );
+            final nextRetry = action.retryCount + 1;
+            if (nextRetry >= kMaxRetries) {
+              storage.queueBox.put(
+                action.id,
+                action.copyWith(
+                  status: 'dead',
+                  retryCount: nextRetry,
+                  failureReason: 'Max retries exceeded',
+                ),
+              );
+            } else {
+              storage.queueBox.put(
+                action.id,
+                action.copyWith(
+                  status: 'pending',
+                  retryCount: nextRetry,
+                ),
+              );
+            }
           }
           refreshCount();
         }
@@ -154,7 +201,9 @@ class QueueProcessor extends _$QueueProcessor {
 
   Future<void> _applySideEffects(QueuedAction action) async {
     final storage = ref.read(appStorageProvider);
+    final notifications = ref.read(notificationServiceProvider);
     final amountKobo = action.payload['amountKobo'] as int;
+    final formatted = Money.formatKobo(amountKobo);
 
     if (action.type == 'send') {
       final recipient = action.payload['recipient'] as String? ?? 'Unknown';
@@ -169,6 +218,10 @@ class QueueProcessor extends _$QueueProcessor {
       );
       storage.txnBox.put(txn.id, txn);
       ref.invalidate(walletProvider);
+      await notifications.showSyncSuccess(
+        'Transfer sent',
+        '✅ Transfer sent — $formatted to $recipient',
+      );
     } else if (action.type == 'contribute') {
       final goalId = action.payload['goalId'] as String;
       final goal = storage.goalsBox.get(goalId);
@@ -180,9 +233,10 @@ class QueueProcessor extends _$QueueProcessor {
       }
       final balance = await storage.getBalanceKobo();
       await storage.setBalanceKobo(balance - amountKobo);
+      final goalName = goal?.name ?? 'Goal';
       final txn = Transaction(
         id: action.id,
-        description: 'NovaSave: ${goal?.name ?? 'Goal'}',
+        description: 'NovaSave: $goalName',
         amountKobo: amountKobo,
         type: 'debit',
         createdAt: DateTime.now(),
@@ -190,6 +244,10 @@ class QueueProcessor extends _$QueueProcessor {
       storage.txnBox.put(txn.id, txn);
       ref.invalidate(walletProvider);
       ref.invalidate(saveGoalsProvider);
+      await notifications.showSyncSuccess(
+        'NovaSave',
+        '✅ NovaSave — $formatted added to $goalName',
+      );
     }
   }
 }

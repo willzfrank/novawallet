@@ -1,0 +1,55 @@
+{
+  "@@locale": "en",
+  "sendMoneyTitle": "Send Money",
+  "recipient": "Recipient",
+  "amount": "Amount",
+  "confirm": "Confirm",
+  "confirmSend": "Confirm Send",
+  "pendingMessage": "Pending — will send when back online",
+  "insufficientBalance": "Insufficient balance",
+  "authRequired": "Authentication required to proceed",
+  "walletHome": "Wallet",
+  "balance": "Balance",
+  "recentTransactions": "Recent Transactions",
+  "noTransactions": "No transactions yet",
+  "pendingActions": "{count} pending",
+  "@pendingActions": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "deadActions": "{count} transfer(s) failed — tap to retry",
+  "@deadActions": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "pullToRefresh": "Pull to refresh",
+  "novaSave": "NovaSave",
+  "myGoals": "My Goals",
+  "noGoals": "No savings goals yet",
+  "createGoal": "Create Goal",
+  "goalName": "Goal Name",
+  "targetAmount": "Target Amount",
+  "targetDate": "Target Date",
+  "contribute": "Contribute",
+  "progress": "Progress",
+  "saved": "Saved",
+  "ofLabel": "of",
+  "goalCreated": "Goal created successfully",
+  "contributed": "Contribution queued",
+  "retry": "Retry",
+  "cancel": "Cancel",
+  "back": "Back",
+  "next": "Next",
+  "send": "Send",
+  "success": "Success",
+  "error": "Something went wrong",
+  "online": "Online",
+  "offline": "Offline",
+  "appName": "NovaWallet"
+}

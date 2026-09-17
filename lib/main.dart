@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
+import 'core/locale/locale_provider.dart';
+import 'core/notifications/notification_service.dart';
 import 'core/storage/app_storage.dart';
 import 'features/wallet/wallet_home_screen.dart';
+import 'l10n/app_localizations.dart';
 import 'queue/queue_processor.dart';
 
 Future<void> main() async {
@@ -11,10 +15,14 @@ Future<void> main() async {
   final storage = AppStorage();
   await storage.init();
 
+  final notifications = NotificationService();
+  await notifications.init();
+
   runApp(
     ProviderScope(
       overrides: [
         appStorageProvider.overrideWithValue(storage),
+        notificationServiceProvider.overrideWithValue(notifications),
       ],
       child: const NovaWalletApp(),
     ),
@@ -52,9 +60,20 @@ class _NovaWalletAppState extends ConsumerState<NovaWalletApp>
 
   @override
   Widget build(BuildContext context) {
+    final locale = ref.watch(localeProvider);
+
     return MaterialApp(
-      title: 'NovaWallet',
+      onGenerateTitle: (context) =>
+          AppLocalizations.of(context)?.appName ?? 'NovaWallet',
       debugShowCheckedModeBanner: false,
+      locale: locale,
+      supportedLocales: AppLocalizations.supportedLocales,
+      localizationsDelegates: const [
+        AppLocalizations.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
           seedColor: const Color(0xFF0B6E4F),

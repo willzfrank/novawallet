@@ -1,0 +1,55 @@
+{
+  "@@locale": "yo",
+  "sendMoneyTitle": "Firanṣẹ Owo",
+  "recipient": "Olùgbà",
+  "amount": "Iye Owó",
+  "confirm": "Jẹrìísí",
+  "confirmSend": "Jẹrìísí Fíránṣẹ",
+  "pendingMessage": "Nduro — yóò ránsẹ nígbà tí ìnẹ́tì padà",
+  "insufficientBalance": "Owó kò tó",
+  "authRequired": "Ìdánimọ̀ nílò láti tẹ̀síwájú",
+  "walletHome": "Àpamọ́wọ́",
+  "balance": "Iye Owó",
+  "recentTransactions": "Àwọn Ìdúnàádúrà Àìpẹ́",
+  "noTransactions": "Kò sí ìdúnàádúrà",
+  "pendingActions": "{count} nduro",
+  "@pendingActions": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "deadActions": "{count} gbígbé kùnà — tẹ láti tún gbìyànjú",
+  "@deadActions": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "pullToRefresh": "Fà láti mú ìmúdójúìwọ̀n",
+  "novaSave": "NovaSave",
+  "myGoals": "Àwọn Àfojúsùn Mi",
+  "noGoals": "Kò sí àfojúsùn ìfipamọ́",
+  "createGoal": "Ṣẹ̀dá Àfojúsùn",
+  "goalName": "Orúkọ Àfojúsùn",
+  "targetAmount": "Iye Owó Àfojúsùn",
+  "targetDate": "Ọjọ́ Àfojúsùn",
+  "contribute": "Ṣe Àfikún",
+  "progress": "Ìlọsíwájú",
+  "saved": "Ti Fipamọ́",
+  "ofLabel": "nínú",
+  "goalCreated": "Àfojúsùn jẹ́ ṣíṣẹ̀dá",
+  "contributed": "Àfikún ti jẹ́ ìpèsè",
+  "retry": "Tún Gbìyànjú",
+  "cancel": "Fagilé",
+  "back": "Padà",
+  "next": "Tókàn",
+  "send": "Firanṣẹ",
+  "success": "Àṣeyọrí",
+  "error": "Nǹkan àṣìṣe ṣẹlẹ̀",
+  "online": "Orí Ẹ̀rọ",
+  "offline": "Kò Sopọ̀",
+  "appName": "NovaWallet"
+}

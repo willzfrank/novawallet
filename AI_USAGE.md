@@ -37,3 +37,6 @@ Early mock API sketch only delayed and returned `true` — no idempotency set. A
 
 ### 6. Misleading `processAttempts` comment
 `MockApiService` comment said `processAttempts` increments on first success only — code actually increments on every non-duplicate attempt including failures. Caught it by reading the implementation, not the comment. Fixed by clarifying the comment.
+
+### 7. Retry count as boolean
+AI suggested storing retry count as a boolean (`hasRetried`) — caught this as it prevents implementing configurable max retry limits; fixed by using `int retryCount` with a threshold constant.

@@ -5,13 +5,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
+import 'package:nova_wallet/core/auth/biometric_service.dart';
 import 'package:nova_wallet/core/network/connectivity_provider.dart';
 import 'package:nova_wallet/core/network/mock_api_service.dart';
+import 'package:nova_wallet/core/notifications/notification_service.dart';
 import 'package:nova_wallet/core/storage/app_storage.dart';
 import 'package:nova_wallet/features/save/save_goals_screen.dart';
 import 'package:nova_wallet/features/save/save_provider.dart';
 import 'package:nova_wallet/features/send/send_money_flow.dart';
+import 'package:nova_wallet/l10n/app_localizations.dart';
 import 'package:nova_wallet/queue/queue_processor.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -34,6 +38,10 @@ void main() {
         mockApiProvider.overrideWithValue(
           MockApiService(failureRate: 0, delay: Duration.zero),
         ),
+        notificationServiceProvider.overrideWithValue(
+          NoOpNotificationService(),
+        ),
+        biometricServiceProvider.overrideWithValue(NoOpBiometricService()),
         connectivityProvider.overrideWith(
           (ref) => Stream.value([ConnectivityResult.none]),
         ),
@@ -45,7 +53,15 @@ void main() {
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
-        child: const MaterialApp(home: SendMoneyFlow()),
+        child: const MaterialApp(
+          localizationsDelegates: [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+          ],
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: SendMoneyFlow(),
+        ),
       ),
     );
     await tester.pump();
@@ -99,6 +115,10 @@ void main() {
         mockApiProvider.overrideWithValue(
           MockApiService(failureRate: 0, delay: Duration.zero),
         ),
+        notificationServiceProvider.overrideWithValue(
+          NoOpNotificationService(),
+        ),
+        biometricServiceProvider.overrideWithValue(NoOpBiometricService()),
         connectivityProvider.overrideWith(
           (ref) => Stream.value([ConnectivityResult.none]),
         ),
@@ -113,7 +133,15 @@ void main() {
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
-        child: MaterialApp(home: ContributeScreen(goalId: goal.id)),
+        child: MaterialApp(
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+          ],
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: ContributeScreen(goalId: goal.id),
+        ),
       ),
     );
     await tester.pump();

@@ -3,8 +3,11 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../core/auth/biometric_service.dart';
 import '../../core/money/money.dart';
+import '../../core/money/money_validator.dart';
 import '../../core/network/connectivity_provider.dart';
+import '../../l10n/app_localizations.dart';
 import '../../queue/queue_processor.dart';
 
 const List<String> kMockContacts = [
@@ -20,6 +23,7 @@ class SendMoneyFlow extends HookConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context)!;
     final step = useState(0);
     final recipientController = useTextEditingController();
     final amountController = useTextEditingController();
@@ -36,7 +40,7 @@ class SendMoneyFlow extends HookConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('Send Money — Step ${step.value + 1}/3'),
+        title: Text('${l10n.sendMoneyTitle} — Step ${step.value + 1}/3'),
       ),
       body: SafeArea(
         child: Padding(
@@ -45,6 +49,7 @@ class SendMoneyFlow extends HookConsumerWidget {
               ? _StepRecipient(
                   controller: recipientController,
                   selectedContact: selectedContact.value,
+                  recipientLabel: l10n.recipient,
                   onContactSelected: (c) {
                     selectedContact.value = c;
                     recipientController.text = c;
@@ -52,7 +57,9 @@ class SendMoneyFlow extends HookConsumerWidget {
                   onNext: () {
                     if (recipient().isEmpty) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Enter or pick a recipient')),
+                        const SnackBar(
+                          content: Text('Enter or pick a recipient'),
+                        ),
                       );
                       return;
                     }
@@ -62,14 +69,32 @@ class SendMoneyFlow extends HookConsumerWidget {
               : step.value == 1
                   ? _StepAmount(
                       controller: amountController,
+                      amountLabel: l10n.amount,
                       onBack: () => step.value = 0,
-                      onNext: () {
+                      onNext: () async {
                         final kobo =
                             Money.nairaStringToKobo(amountController.text);
                         if (kobo == null || kobo <= 0) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
                               content: Text('Enter a valid amount in Naira'),
+                            ),
+                          );
+                          return;
+                        }
+                        final err = await MoneyValidator.validate(
+                          kobo,
+                          ref.read(appStorageProvider),
+                        );
+                        if (!context.mounted) return;
+                        if (err != null) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                err == 'Insufficient balance'
+                                    ? l10n.insufficientBalance
+                                    : err,
+                              ),
                             ),
                           );
                           return;
@@ -84,12 +109,55 @@ class SendMoneyFlow extends HookConsumerWidget {
                       amountKobo: amountKobo.value ?? 0,
                       idempotencyKey: idempotencyPreview.value,
                       submitting: submitting.value,
+                      recipientLabel: l10n.recipient,
+                      amountLabel: l10n.amount,
+                      confirmLabel: l10n.confirm,
                       onBack: () => step.value = 1,
                       onConfirm: () async {
                         if (amountKobo.value == null ||
                             idempotencyPreview.value == null) {
                           return;
                         }
+                        final kobo = amountKobo.value!;
+                        final to = recipient();
+                        final formatted = Money.formatKobo(kobo);
+
+                        // Re-validate balance before enqueue.
+                        final err = await MoneyValidator.validate(
+                          kobo,
+                          ref.read(appStorageProvider),
+                        );
+                        if (!context.mounted) return;
+                        if (err != null) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                err == 'Insufficient balance'
+                                    ? l10n.insufficientBalance
+                                    : err,
+                              ),
+                            ),
+                          );
+                          return;
+                        }
+
+                        // Biometric gate for large transfers.
+                        if (kobo >= kBiometricThresholdKobo) {
+                          final biometrics = ref.read(biometricServiceProvider);
+                          if (await biometrics.isAvailable()) {
+                            final ok = await biometrics.authenticate(
+                              'Confirm transfer of $formatted to $to',
+                            );
+                            if (!context.mounted) return;
+                            if (!ok) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text(l10n.authRequired)),
+                              );
+                              return;
+                            }
+                          }
+                        }
+
                         submitting.value = true;
                         try {
                           final online = ref.read(isOnlineProvider);
@@ -98,35 +166,38 @@ class SendMoneyFlow extends HookConsumerWidget {
                               .submitOrQueue(
                                 type: 'send',
                                 payload: {
-                                  'recipient': recipient(),
-                                  'amountKobo': amountKobo.value,
+                                  'recipient': to,
+                                  'amountKobo': kobo,
                                 },
                                 online: online,
                                 idempotencyKey: idempotencyPreview.value,
                               );
                           if (!context.mounted) return;
-                          if (result.queuedOffline ||
-                              ref
-                                  .read(appStorageProvider)
-                                  .queueBox
-                                  .containsKey(result.action.id)) {
+                          final stillQueued = ref
+                              .read(appStorageProvider)
+                              .queueBox
+                              .containsKey(result.action.id);
+                          if (!online) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text(l10n.pendingMessage)),
+                            );
+                          } else if (stillQueued) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
                                 content: Text(
-                                  'Pending — will send when back online',
+                                  'Send failed — queued for retry',
                                 ),
                               ),
                             );
                           } else {
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
-                                content: Text(
-                                  'Sent ${Money.formatKobo(amountKobo.value!)} to ${recipient()}',
-                                ),
+                                content: Text('Sent $formatted to $to'),
                               ),
                             );
                           }
-                          if (context.mounted && Navigator.of(context).canPop()) {
+                          if (context.mounted &&
+                              Navigator.of(context).canPop()) {
                             Navigator.of(context).pop();
                           }
                         } finally {
@@ -144,12 +215,14 @@ class _StepRecipient extends StatelessWidget {
   const _StepRecipient({
     required this.controller,
     required this.selectedContact,
+    required this.recipientLabel,
     required this.onContactSelected,
     required this.onNext,
   });
 
   final TextEditingController controller;
   final String? selectedContact;
+  final String recipientLabel;
   final ValueChanged<String> onContactSelected;
   final VoidCallback onNext;
 
@@ -164,9 +237,9 @@ class _StepRecipient extends StatelessWidget {
           hint: 'Enter recipient',
           child: TextField(
             controller: controller,
-            decoration: const InputDecoration(
-              labelText: 'Recipient',
-              border: OutlineInputBorder(),
+            decoration: InputDecoration(
+              labelText: recipientLabel,
+              border: const OutlineInputBorder(),
             ),
             textInputAction: TextInputAction.next,
           ),
@@ -204,7 +277,7 @@ class _StepRecipient extends StatelessWidget {
           child: FilledButton(
             key: const Key('send_next_recipient'),
             onPressed: onNext,
-            child: const Text('Next'),
+            child: Text(AppLocalizations.of(context)!.next),
           ),
         ),
       ],
@@ -215,16 +288,19 @@ class _StepRecipient extends StatelessWidget {
 class _StepAmount extends StatelessWidget {
   const _StepAmount({
     required this.controller,
+    required this.amountLabel,
     required this.onBack,
     required this.onNext,
   });
 
   final TextEditingController controller;
+  final String amountLabel;
   final VoidCallback onBack;
   final VoidCallback onNext;
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -235,10 +311,10 @@ class _StepAmount extends StatelessWidget {
           child: TextField(
             controller: controller,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            decoration: const InputDecoration(
-              labelText: 'Amount (₦)',
+            decoration: InputDecoration(
+              labelText: '$amountLabel (₦)',
               hintText: '1500.75',
-              border: OutlineInputBorder(),
+              border: const OutlineInputBorder(),
               prefixText: '₦ ',
             ),
           ),
@@ -253,7 +329,7 @@ class _StepAmount extends StatelessWidget {
                 hint: 'Double tap to go back',
                 child: OutlinedButton(
                   onPressed: onBack,
-                  child: const Text('Back'),
+                  child: Text(l10n.back),
                 ),
               ),
             ),
@@ -266,7 +342,7 @@ class _StepAmount extends StatelessWidget {
                 child: FilledButton(
                   key: const Key('send_next_amount'),
                   onPressed: onNext,
-                  child: const Text('Next'),
+                  child: Text(l10n.next),
                 ),
               ),
             ),
@@ -283,6 +359,9 @@ class _StepConfirm extends StatelessWidget {
     required this.amountKobo,
     required this.idempotencyKey,
     required this.submitting,
+    required this.recipientLabel,
+    required this.amountLabel,
+    required this.confirmLabel,
     required this.onBack,
     required this.onConfirm,
   });
@@ -291,23 +370,30 @@ class _StepConfirm extends StatelessWidget {
   final int amountKobo;
   final String? idempotencyKey;
   final bool submitting;
+  final String recipientLabel;
+  final String amountLabel;
+  final String confirmLabel;
   final VoidCallback onBack;
   final Future<void> Function() onConfirm;
 
   @override
   Widget build(BuildContext context) {
     final formatted = Money.formatKobo(amountKobo);
+    final l10n = AppLocalizations.of(context)!;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text('Confirm transfer', style: Theme.of(context).textTheme.titleLarge),
+        Text(
+          l10n.confirmSend,
+          style: Theme.of(context).textTheme.titleLarge,
+        ),
         const SizedBox(height: 24),
         ListTile(
-          title: const Text('Recipient'),
+          title: Text(recipientLabel),
           subtitle: Text(recipient),
         ),
         ListTile(
-          title: const Text('Amount'),
+          title: Text(amountLabel),
           subtitle: Text(formatted),
         ),
         ListTile(
@@ -327,7 +413,7 @@ class _StepConfirm extends StatelessWidget {
                 hint: 'Double tap to go back',
                 child: OutlinedButton(
                   onPressed: submitting ? null : onBack,
-                  child: const Text('Back'),
+                  child: Text(l10n.back),
                 ),
               ),
             ),
@@ -350,7 +436,7 @@ class _StepConfirm extends StatelessWidget {
                           width: 20,
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
-                      : const Text('Confirm'),
+                      : Text(confirmLabel),
                 ),
               ),
             ),

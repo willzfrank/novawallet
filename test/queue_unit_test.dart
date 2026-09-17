@@ -8,6 +8,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import 'package:nova_wallet/core/network/connectivity_provider.dart';
 import 'package:nova_wallet/core/network/mock_api_service.dart';
+import 'package:nova_wallet/core/notifications/notification_service.dart';
 import 'package:nova_wallet/core/storage/app_storage.dart';
 import 'package:nova_wallet/queue/queue_processor.dart';
 
@@ -24,6 +25,9 @@ void main() {
       overrides: [
         appStorageProvider.overrideWithValue(storage),
         mockApiProvider.overrideWithValue(api),
+        notificationServiceProvider.overrideWithValue(
+          NoOpNotificationService(),
+        ),
         connectivityProvider.overrideWith(
           (ref) => Stream.value([ConnectivityResult.wifi]),
         ),

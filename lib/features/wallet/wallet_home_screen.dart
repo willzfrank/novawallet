@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
+import '../../core/locale/locale_provider.dart';
 import '../../core/money/money.dart';
+import '../../l10n/app_localizations.dart';
 import '../../queue/queue_processor.dart';
 import '../save/save_goals_screen.dart';
 import '../send/send_money_flow.dart';
@@ -12,22 +14,34 @@ class WalletHomeScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context)!;
     final walletAsync = ref.watch(walletProvider);
     final pendingCount = ref.watch(queueProcessorProvider);
+    final deadCount = ref.read(queueProcessorProvider.notifier).deadCount();
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('NovaWallet'),
+        title: Text(l10n.walletHome),
         actions: [
+          Semantics(
+            button: true,
+            label: 'Toggle language',
+            hint: 'Double tap to switch between English and Yoruba',
+            child: IconButton(
+              key: const Key('locale_toggle'),
+              icon: const Icon(Icons.language),
+              onPressed: () => ref.read(localeProvider.notifier).toggle(),
+            ),
+          ),
           if (pendingCount > 0)
             Padding(
               padding: const EdgeInsets.only(right: 12),
               child: Semantics(
-                label: '$pendingCount pending queue actions',
-                hint: 'Pending actions will sync when online',
+                label: l10n.pendingActions(pendingCount),
+                hint: l10n.pullToRefresh,
                 child: Chip(
                   avatar: const Icon(Icons.cloud_upload_outlined, size: 18),
-                  label: Text('$pendingCount pending'),
+                  label: Text(l10n.pendingActions(pendingCount)),
                 ),
               ),
             ),
@@ -35,7 +49,7 @@ class WalletHomeScreen extends ConsumerWidget {
       ),
       body: walletAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Error: $e')),
+        error: (e, _) => Center(child: Text('${l10n.error}: $e')),
         data: (wallet) => RefreshIndicator(
           onRefresh: () async {
             await ref.read(walletProvider.notifier).refresh();
@@ -44,6 +58,52 @@ class WalletHomeScreen extends ConsumerWidget {
           child: CustomScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
             slivers: [
+              if (deadCount > 0)
+                SliverToBoxAdapter(
+                  child: Semantics(
+                    button: true,
+                    label: l10n.deadActions(deadCount),
+                    hint: l10n.retry,
+                    child: Material(
+                      color: Theme.of(context).colorScheme.errorContainer,
+                      child: InkWell(
+                        onTap: () {
+                          ref
+                              .read(queueProcessorProvider.notifier)
+                              .retryDeadActions();
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
+                          ),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  '⚠️ ${l10n.deadActions(deadCount)}',
+                                  style: TextStyle(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onErrorContainer,
+                                  ),
+                                ),
+                              ),
+                              TextButton(
+                                onPressed: () {
+                                  ref
+                                      .read(queueProcessorProvider.notifier)
+                                      .retryDeadActions();
+                                },
+                                child: Text(l10n.retry),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.all(24),
@@ -51,15 +111,19 @@ class WalletHomeScreen extends ConsumerWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Available balance',
+                        l10n.balance,
                         style: Theme.of(context).textTheme.titleMedium,
                       ),
                       const SizedBox(height: 8),
                       Semantics(
-                        label: 'Wallet balance ${Money.formatKobo(wallet.balanceKobo)}',
+                        label:
+                            '${l10n.balance} ${Money.formatKobo(wallet.balanceKobo)}',
                         child: Text(
                           Money.formatKobo(wallet.balanceKobo),
-                          style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                          style: Theme.of(context)
+                              .textTheme
+                              .headlineMedium
+                              ?.copyWith(
                                 fontWeight: FontWeight.bold,
                               ),
                         ),
@@ -70,7 +134,7 @@ class WalletHomeScreen extends ConsumerWidget {
                           Expanded(
                             child: Semantics(
                               button: true,
-                              label: 'Send money',
+                              label: l10n.sendMoneyTitle,
                               hint: 'Double tap to start send money flow',
                               child: FilledButton.icon(
                                 onPressed: () {
@@ -81,7 +145,7 @@ class WalletHomeScreen extends ConsumerWidget {
                                   );
                                 },
                                 icon: const Icon(Icons.send),
-                                label: const Text('Send'),
+                                label: Text(l10n.send),
                               ),
                             ),
                           ),
@@ -89,7 +153,7 @@ class WalletHomeScreen extends ConsumerWidget {
                           Expanded(
                             child: Semantics(
                               button: true,
-                              label: 'NovaSave goals',
+                              label: l10n.novaSave,
                               hint: 'Double tap to open savings goals',
                               child: OutlinedButton.icon(
                                 onPressed: () {
@@ -100,7 +164,7 @@ class WalletHomeScreen extends ConsumerWidget {
                                   );
                                 },
                                 icon: const Icon(Icons.savings_outlined),
-                                label: const Text('NovaSave'),
+                                label: Text(l10n.novaSave),
                               ),
                             ),
                           ),
@@ -108,7 +172,7 @@ class WalletHomeScreen extends ConsumerWidget {
                       ),
                       const SizedBox(height: 32),
                       Text(
-                        'Recent transactions',
+                        l10n.recentTransactions,
                         style: Theme.of(context).textTheme.titleMedium,
                       ),
                     ],
@@ -116,9 +180,9 @@ class WalletHomeScreen extends ConsumerWidget {
                 ),
               ),
               if (wallet.transactions.isEmpty)
-                const SliverFillRemaining(
+                SliverFillRemaining(
                   hasScrollBody: false,
-                  child: Center(child: Text('No transactions yet')),
+                  child: Center(child: Text(l10n.noTransactions)),
                 )
               else
                 SliverPadding(
