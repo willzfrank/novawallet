@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../core/money/money.dart';
+import '../../core/money/naira_input_formatter.dart';
 import '../../l10n/app_localizations.dart';
 
 /// Amount step — commas live in the field (validate only on Next).
@@ -44,7 +44,7 @@ class _SendAmountScreenState extends ConsumerState<SendAmountScreen> {
           child: TextField(
             controller: controller,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            inputFormatters: const [_NairaThousandsFormatter()],
+            inputFormatters: const [NairaThousandsFormatter()],
             decoration: InputDecoration(
               labelText: '${widget.amountLabel} (₦)',
               hintText: '1,500.75',
@@ -83,22 +83,6 @@ class _SendAmountScreenState extends ConsumerState<SendAmountScreen> {
           ],
         ),
       ],
-    );
-  }
-}
-
-class _NairaThousandsFormatter extends TextInputFormatter {
-  const _NairaThousandsFormatter();
-
-  @override
-  TextEditingValue formatEditUpdate(
-    TextEditingValue oldValue,
-    TextEditingValue newValue,
-  ) {
-    final formatted = Money.formatNairaTyping(newValue.text);
-    return TextEditingValue(
-      text: formatted,
-      selection: TextSelection.collapsed(offset: formatted.length),
     );
   }
 }

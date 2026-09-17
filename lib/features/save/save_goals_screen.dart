@@ -4,6 +4,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../core/money/money.dart';
 import '../../core/money/money_validator.dart';
+import '../../core/money/naira_input_formatter.dart';
 import '../../core/network/connectivity_provider.dart';
 import '../../l10n/app_localizations.dart';
 import '../../models/save_goal.dart';
@@ -160,8 +161,10 @@ class CreateGoalScreen extends HookConsumerWidget {
                 controller: amountController,
                 keyboardType:
                     const TextInputType.numberWithOptions(decimal: true),
+                inputFormatters: const [NairaThousandsFormatter()],
                 decoration: InputDecoration(
                   labelText: '${l10n.targetAmount} (₦)',
+                  hintText: '40,000',
                   border: const OutlineInputBorder(),
                   prefixText: '₦ ',
                 ),
@@ -286,8 +289,10 @@ class ContributeScreen extends HookConsumerWidget {
                 controller: amountController,
                 keyboardType:
                     const TextInputType.numberWithOptions(decimal: true),
+                inputFormatters: const [NairaThousandsFormatter()],
                 decoration: InputDecoration(
                   labelText: '${l10n.amount} (₦)',
+                  hintText: '1,500.75',
                   border: const OutlineInputBorder(),
                   prefixText: '₦ ',
                 ),
