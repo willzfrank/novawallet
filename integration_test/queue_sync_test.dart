@@ -9,6 +9,7 @@ import 'package:hive/hive.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:integration_test/integration_test.dart';
 
+import 'package:nova_wallet/core/network/api_result.dart';
 import 'package:nova_wallet/core/network/connectivity_provider.dart';
 import 'package:nova_wallet/core/network/mock_api_service.dart';
 import 'package:nova_wallet/core/notifications/notification_service.dart';
@@ -88,7 +89,7 @@ void main() {
         {'recipient': 'Ada Okafor', 'amountKobo': 150075},
         action.id,
       );
-      expect(dup, isTrue);
+      expect(dup, isA<ApiSuccess>());
       expect(api.processedKeys.length, 1);
     },
   );

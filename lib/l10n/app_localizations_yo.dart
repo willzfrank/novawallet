@@ -126,4 +126,10 @@ class AppLocalizationsYo extends AppLocalizations {
 
   @override
   String get appName => 'NovaWallet';
+
+  @override
+  String get today => 'Lónìí';
+
+  @override
+  String get yesterday => 'Àná';
 }

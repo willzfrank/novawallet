@@ -66,8 +66,8 @@ Why Riverpod over Bloc/GetX:
 1. **Persist**: every action is a Hive `QueuedAction` with UUID v4 `id` (idempotency key) created once
 2. **Crash recovery**: on `AppStorage.init`, any `status == processing` → `pending`
 3. **Connectivity**: `connectivityProvider` (`StreamProvider`) watched; `QueueProcessorNotifier` uses `ref.listen` to call `processPending()` when online
-4. **Loop**: pending → processing → MockApi (1s + 10% fail) → success deletes row / failure increments `retryCount` (dead at ≥3) or resets pending
-5. **Idempotency**: MockApi keeps a `Set` of keys; duplicates return `true` without re-applying side effects
+4. **Loop**: pending → processing → MockApi (1s + 10% network fail / business errors) → success deletes row; network failure uses exponential backoff + jitter (`RetryPolicy`) up to `kMaxRetries` then `dead`; business errors go `dead` immediately
+5. **Idempotency**: MockApi keeps a `Set` of keys; duplicates return `ApiSuccess` without re-applying side effects
 6. **Survival**: queue is Hive-only — app kill mid-flight recovers via step 2
 7. **Notifications**: successful sync triggers local notification via `NotificationService`
 
@@ -88,6 +88,38 @@ Why Riverpod over Bloc/GetX:
 - `SliverChildBuilderDelegate` / `ListView.builder` used for lists (lazy)
 - macOS/iOS need secure storage entitlements (Flutter plugin defaults)
 - Connectivity events on iOS Simulator can lag; app foreground resume (`AppLifecycleState.resumed`) triggers a queue flush as a fallback. Physical device recommended for offline demo.
+
+## Architecture Decisions
+
+### ADR-001: Riverpod over Bloc
+Context: Needed reactive connectivity wiring and testable state for offline queue.
+Decision: Riverpod with hooks_riverpod.
+Rationale: ref.listen enables reactive queue trigger without polling. ProviderScope overrides make tests clean. Bloc adds Events/States boilerplate without benefit for a solo offline-first flow.
+Consequence: Less familiar to Bloc-heavy teams; mitigated by standard Notifier API.
+
+### ADR-002: Hive over sqflite for Queue Persistence
+Context: Queue must survive app restarts; needs fast key-value access by action id.
+Decision: Hive with typed adapters.
+Rationale: sqflite requires a schema migration path and SQL overhead for a simple key-value queue. Hive reads/writes are synchronous-feeling and type-safe via adapters. Trade-off: no relational queries — acceptable since queue is simple.
+Consequence: Hive box corruption (rare) would lose the queue; mitigated by crash recovery resetting PROCESSING → PENDING on cold start.
+
+### ADR-003: Idempotency Key Responsibility Split
+Context: Offline retries could double-send money.
+Decision: Client generates UUID v4 once, never changes. Server (mock) enforces deduplication.
+Rationale: Client cannot know if a request was processed — only the server can. The UUID is the contract between client retry logic and server deduplication. Changing the key on retry would defeat the purpose.
+Consequence: Requires server-side idempotency enforcement — documented assumption in Trade-offs.
+
+### ADR-004: Exponential Backoff with Jitter
+Context: Network failures should not hammer a recovering server.
+Decision: 2^retryCount seconds + 0-1000ms random jitter, max 3 retries.
+Rationale: Pure exponential backoff causes thundering herd when many devices reconnect simultaneously (common after Nigerian network outages). Jitter spreads the load.
+Consequence: Maximum wait before dead-letter is ~7s + jitter. Acceptable for fintech UX.
+
+### ADR-005: Balance in flutter_secure_storage
+Context: Brief prohibits sensitive data in plain SharedPreferences.
+Decision: Wallet balance stored as kobo string in flutter_secure_storage.
+Rationale: Balance is sensitive financial data. Secure storage uses Android Keystore / iOS Secure Enclave. Trade-off: async reads required before every display.
+Consequence: Cold-start balance fetch adds ~10ms; acceptable.
 
 ## Stretch Goals Implemented
 
@@ -120,7 +152,8 @@ Supported locales: `en`, `yo`. ARB sources under `lib/l10n/`.
 
 ### Dead letter queue
 
-- On API failure: `retryCount++`
-- At `retryCount >= 3`: status → `dead`, `failureReason: Max retries exceeded` (not re-queued as pending)
-- Wallet home banner: tap → reset to `pending` / `retryCount: 0` → `processPending()`
+- On `ApiNetworkError`: backoff + jitter, `retryCount++`, retry while `retryCount < kMaxRetries`
+- At `retryCount >= kMaxRetries`: status → `dead`, `failureReason: Max retries exceeded`
+- On `ApiBusinessError`: status → `dead` immediately (no retries), `failureReason` = API reason
+- Wallet home banner: shows reason when available; tap → reset to `pending` / `retryCount: 0` → `processPending()`
 

@@ -51,5 +51,7 @@
   "error": "Something went wrong",
   "online": "Online",
   "offline": "Offline",
-  "appName": "NovaWallet"
+  "appName": "NovaWallet",
+  "today": "Today",
+  "yesterday": "Yesterday"
 }

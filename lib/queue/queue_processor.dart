@@ -1,11 +1,14 @@
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:flutter/foundation.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:uuid/uuid.dart';
 
 import '../core/money/money.dart';
+import '../core/network/api_result.dart';
 import '../core/network/connectivity_provider.dart';
 import '../core/network/mock_api_service.dart';
+import '../core/network/retry_policy.dart';
 import '../core/notifications/notification_service.dart';
 import '../core/storage/app_storage.dart';
 import '../features/save/save_provider.dart';
@@ -14,8 +17,6 @@ import '../models/queued_action.dart';
 import '../models/transaction.dart';
 
 part 'queue_processor.g.dart';
-
-const int kMaxRetries = 3;
 
 @Riverpod(keepAlive: true)
 AppStorage appStorage(AppStorageRef ref) {
@@ -30,6 +31,10 @@ class QueueProcessor extends _$QueueProcessor {
   static const _uuid = Uuid();
   bool _processing = false;
   bool _rerunRequested = false;
+
+  /// Tests set this to skip real backoff delays.
+  @visibleForTesting
+  Duration Function(int)? retryDelayOverride;
 
   @override
   int build() {
@@ -68,6 +73,21 @@ class QueueProcessor extends _$QueueProcessor {
         .values
         .where((a) => a.status == 'dead')
         .length;
+  }
+
+  /// First dead action's failure reason, if any.
+  String? firstDeadFailureReason() {
+    final dead = ref
+        .read(appStorageProvider)
+        .queueBox
+        .values
+        .where((a) => a.status == 'dead');
+    for (final action in dead) {
+      if (action.failureReason != null && action.failureReason!.isNotEmpty) {
+        return action.failureReason;
+      }
+    }
+    return null;
   }
 
   void refreshCount() {
@@ -148,7 +168,7 @@ class QueueProcessor extends _$QueueProcessor {
             .toList()
           ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
 
-        for (final action in pending) {
+        for (var action in pending) {
           // Hive local puts are applied synchronously; avoid awaiting Futures
           // that can stall under Flutter test fake-async.
           storage.queueBox.put(
@@ -157,38 +177,62 @@ class QueueProcessor extends _$QueueProcessor {
           );
           refreshCount();
 
-          final bool ok;
-          if (action.type == 'send') {
-            ok = await api.sendMoney(action.payload, action.id);
-          } else if (action.type == 'contribute') {
-            ok = await api.contribute(action.payload, action.id);
-          } else {
-            ok = false;
-          }
+          // Exhaust network retries for this action within one drain pass.
+          while (true) {
+            final ApiResult result;
+            if (action.type == 'send') {
+              result = await api.sendMoney(action.payload, action.id);
+            } else if (action.type == 'contribute') {
+              result = await api.contribute(action.payload, action.id);
+            } else {
+              result = const ApiBusinessError('UNKNOWN_TYPE');
+            }
 
-          if (ok) {
-            await _applySideEffects(action);
-            storage.queueBox.delete(action.id);
-          } else {
-            final nextRetry = action.retryCount + 1;
-            if (nextRetry >= kMaxRetries) {
+            if (result is ApiSuccess) {
+              await _applySideEffects(action);
+              storage.queueBox.delete(action.id);
+              break;
+            }
+
+            if (result is ApiBusinessError) {
               storage.queueBox.put(
                 action.id,
                 action.copyWith(
                   status: 'dead',
-                  retryCount: nextRetry,
-                  failureReason: 'Max retries exceeded',
+                  failureReason: result.reason,
                 ),
               );
-            } else {
+              break;
+            }
+
+            // ApiNetworkError — retry with backoff up to kMaxRetries.
+            if (RetryPolicy.shouldRetry(action.retryCount)) {
+              final delay = retryDelayOverride?.call(action.retryCount) ??
+                  RetryPolicy.backoffDuration(action.retryCount);
+              if (delay > Duration.zero) {
+                await Future<void>.delayed(delay);
+              }
+              action = action.copyWith(
+                status: 'pending',
+                retryCount: action.retryCount + 1,
+              );
+              storage.queueBox.put(action.id, action);
               storage.queueBox.put(
                 action.id,
-                action.copyWith(
-                  status: 'pending',
-                  retryCount: nextRetry,
-                ),
+                action.copyWith(status: 'processing'),
               );
+              refreshCount();
+              continue;
             }
+
+            storage.queueBox.put(
+              action.id,
+              action.copyWith(
+                status: 'dead',
+                failureReason: 'Max retries exceeded',
+              ),
+            );
+            break;
           }
           refreshCount();
         }

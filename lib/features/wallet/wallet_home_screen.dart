@@ -4,9 +4,11 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import '../../core/locale/locale_provider.dart';
 import '../../core/money/money.dart';
 import '../../l10n/app_localizations.dart';
+import '../../models/transaction.dart';
 import '../../queue/queue_processor.dart';
 import '../save/save_goals_screen.dart';
 import '../send/send_money_flow.dart';
+import 'transaction_group.dart';
 import 'wallet_provider.dart';
 
 class WalletHomeScreen extends ConsumerWidget {
@@ -17,7 +19,9 @@ class WalletHomeScreen extends ConsumerWidget {
     final l10n = AppLocalizations.of(context)!;
     final walletAsync = ref.watch(walletProvider);
     final pendingCount = ref.watch(queueProcessorProvider);
-    final deadCount = ref.read(queueProcessorProvider.notifier).deadCount();
+    final processor = ref.read(queueProcessorProvider.notifier);
+    final deadCount = processor.deadCount();
+    final deadReason = processor.firstDeadFailureReason();
 
     return Scaffold(
       appBar: AppBar(
@@ -62,7 +66,9 @@ class WalletHomeScreen extends ConsumerWidget {
                 SliverToBoxAdapter(
                   child: Semantics(
                     button: true,
-                    label: l10n.deadActions(deadCount),
+                    label: deadReason == null || deadReason.isEmpty
+                        ? l10n.deadActions(deadCount)
+                        : '${l10n.deadActions(deadCount)} — $deadReason',
                     hint: l10n.retry,
                     child: Material(
                       color: Theme.of(context).colorScheme.errorContainer,
@@ -81,7 +87,9 @@ class WalletHomeScreen extends ConsumerWidget {
                             children: [
                               Expanded(
                                 child: Text(
-                                  '⚠️ ${l10n.deadActions(deadCount)}',
+                                  deadReason == null || deadReason.isEmpty
+                                      ? '⚠️ ${l10n.deadActions(deadCount)}'
+                                      : '⚠️ ${l10n.deadActions(deadCount)} — $deadReason',
                                   style: TextStyle(
                                     color: Theme.of(context)
                                         .colorScheme
@@ -185,43 +193,10 @@ class WalletHomeScreen extends ConsumerWidget {
                   child: Center(child: Text(l10n.noTransactions)),
                 )
               else
-                SliverPadding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  sliver: SliverList(
-                    delegate: SliverChildBuilderDelegate(
-                      (context, index) {
-                        final txn = wallet.transactions[index];
-                        final isDebit = txn.type == 'debit';
-                        final amountLabel =
-                            '${isDebit ? '-' : '+'}${Money.formatKobo(txn.amountKobo)}';
-                        return Semantics(
-                          label:
-                              '${txn.description}, $amountLabel, ${txn.type}',
-                          child: ListTile(
-                            leading: Icon(
-                              isDebit
-                                  ? Icons.arrow_upward
-                                  : Icons.arrow_downward,
-                              color: isDebit ? Colors.red : Colors.green,
-                            ),
-                            title: Text(txn.description),
-                            subtitle: Text(
-                              MaterialLocalizations.of(context)
-                                  .formatShortDate(txn.createdAt),
-                            ),
-                            trailing: Text(
-                              amountLabel,
-                              style: TextStyle(
-                                color: isDebit ? Colors.red : Colors.green,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                        );
-                      },
-                      childCount: wallet.transactions.length,
-                    ),
-                  ),
+                _TransactionGroupedSliver(
+                  transactions: wallet.transactions,
+                  todayLabel: l10n.today,
+                  yesterdayLabel: l10n.yesterday,
                 ),
             ],
           ),
@@ -229,4 +204,97 @@ class WalletHomeScreen extends ConsumerWidget {
       ),
     );
   }
+}
+
+class _TransactionGroupedSliver extends StatelessWidget {
+  const _TransactionGroupedSliver({
+    required this.transactions,
+    required this.todayLabel,
+    required this.yesterdayLabel,
+  });
+
+  final List<Transaction> transactions;
+  final String todayLabel;
+  final String yesterdayLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    final groups = groupTransactions(
+      transactions,
+      todayLabel: todayLabel,
+      yesterdayLabel: yesterdayLabel,
+    );
+
+    // Flatten groups into header + item rows for lazy SliverList.
+    final rows = <_TxnRow>[];
+    for (final group in groups) {
+      rows.add(_TxnRow.header(group.label));
+      for (final txn in group.transactions) {
+        rows.add(_TxnRow.item(txn));
+      }
+    }
+
+    return SliverPadding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      sliver: SliverList(
+        delegate: SliverChildBuilderDelegate(
+          (context, index) {
+            final row = rows[index];
+            if (row.isHeader) {
+              return Padding(
+                padding: const EdgeInsets.only(top: 12, bottom: 4),
+                child: Text(
+                  row.label!,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Colors.grey,
+                        fontWeight: FontWeight.w600,
+                      ),
+                ),
+              );
+            }
+            final txn = row.txn!;
+            final isDebit = txn.type == 'debit';
+            final amountLabel =
+                '${isDebit ? '-' : '+'}${Money.formatKobo(txn.amountKobo)}';
+            return Semantics(
+              label: '${txn.description}, $amountLabel, ${txn.type}',
+              child: ListTile(
+                leading: Icon(
+                  isDebit ? Icons.arrow_upward : Icons.arrow_downward,
+                  color: isDebit ? Colors.red : Colors.green,
+                ),
+                title: Text(txn.description),
+                subtitle: Text(
+                  MaterialLocalizations.of(context)
+                      .formatShortDate(txn.createdAt),
+                ),
+                trailing: Text(
+                  amountLabel,
+                  style: TextStyle(
+                    color: isDebit ? Colors.red : Colors.green,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            );
+          },
+          childCount: rows.length,
+        ),
+      ),
+    );
+  }
+}
+
+class _TxnRow {
+  _TxnRow.header(this.label)
+      : txn = null,
+        isHeader = true;
+
+  _TxnRow.item(this.txn)
+      : label = null,
+        isHeader = false;
+
+  final String? label;
+  final Transaction? txn;
+  final bool isHeader;
 }

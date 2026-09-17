@@ -1,6 +1,8 @@
 import 'dart:math';
 
-/// Local mock API with idempotency + 10% failure.
+import 'api_result.dart';
+
+/// Local mock API with idempotency + 10% network failure.
 class MockApiService {
   MockApiService({
     Random? random,
@@ -25,44 +27,57 @@ class MockApiService {
     processAttempts.clear();
   }
 
-  Future<bool> sendMoney(
+  Future<ApiResult> sendMoney(
     Map<String, dynamic> payload,
     String idempotencyKey,
   ) {
     return _execute(idempotencyKey, payload);
   }
 
-  Future<bool> contribute(
+  Future<ApiResult> contribute(
     Map<String, dynamic> payload,
     String idempotencyKey,
   ) {
     return _execute(idempotencyKey, payload);
   }
 
-  Future<bool> _execute(String idempotencyKey, Map<String, dynamic> payload) async {
+  Future<ApiResult> _execute(
+    String idempotencyKey,
+    Map<String, dynamic> payload,
+  ) async {
     if (delay > Duration.zero) {
       await Future<void>.delayed(delay);
     }
 
-    // Duplicate UUID → 200 already processed (success, no reprocess).
+    // Duplicate UUID → already processed (success, no reprocess).
     if (processedKeys.contains(idempotencyKey)) {
       // ignore: avoid_print
-      print('[MockAPI] duplicate idempotencyKey=$idempotencyKey — already processed');
-      return true;
+      print(
+        '[MockAPI] duplicate idempotencyKey=$idempotencyKey — already processed',
+      );
+      return const ApiSuccess();
     }
 
     processAttempts[idempotencyKey] =
         (processAttempts[idempotencyKey] ?? 0) + 1;
 
+    if (payload['forceBusinessError'] == true) {
+      // ignore: avoid_print
+      print(
+        '[MockAPI] BUSINESS_ERROR idempotencyKey=$idempotencyKey payload=$payload',
+      );
+      return const ApiBusinessError('INSUFFICIENT_FUNDS');
+    }
+
     if (_random.nextDouble() < failureRate) {
       // ignore: avoid_print
       print('[MockAPI] FAIL idempotencyKey=$idempotencyKey payload=$payload');
-      return false;
+      return const ApiNetworkError();
     }
 
     processedKeys.add(idempotencyKey);
     // ignore: avoid_print
     print('[MockAPI] OK idempotencyKey=$idempotencyKey payload=$payload');
-    return true;
+    return const ApiSuccess();
   }
 }

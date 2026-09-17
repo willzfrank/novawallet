@@ -126,4 +126,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get appName => 'NovaWallet';
+
+  @override
+  String get today => 'Today';
+
+  @override
+  String get yesterday => 'Yesterday';
 }

@@ -9,6 +9,7 @@ import '../../core/money/money_validator.dart';
 import '../../core/network/connectivity_provider.dart';
 import '../../l10n/app_localizations.dart';
 import '../../queue/queue_processor.dart';
+import 'send_amount_screen.dart';
 
 const List<String> kMockContacts = [
   'Ada Okafor',
@@ -26,7 +27,7 @@ class SendMoneyFlow extends HookConsumerWidget {
     final l10n = AppLocalizations.of(context)!;
     final step = useState(0);
     final recipientController = useTextEditingController();
-    final amountController = useTextEditingController();
+    final amountText = useState('');
     final selectedContact = useState<String?>(null);
     final amountKobo = useState<int?>(null);
     final idempotencyPreview = useState<String?>(null);
@@ -67,13 +68,13 @@ class SendMoneyFlow extends HookConsumerWidget {
                   },
                 )
               : step.value == 1
-                  ? _StepAmount(
-                      controller: amountController,
+                  ? SendAmountScreen(
+                      initialText: amountText.value,
                       amountLabel: l10n.amount,
                       onBack: () => step.value = 0,
-                      onNext: () async {
-                        final kobo =
-                            Money.nairaStringToKobo(amountController.text);
+                      onNext: (text) async {
+                        amountText.value = text;
+                        final kobo = Money.nairaStringToKobo(text);
                         if (kobo == null || kobo <= 0) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
@@ -279,74 +280,6 @@ class _StepRecipient extends StatelessWidget {
             onPressed: onNext,
             child: Text(AppLocalizations.of(context)!.next),
           ),
-        ),
-      ],
-    );
-  }
-}
-
-class _StepAmount extends StatelessWidget {
-  const _StepAmount({
-    required this.controller,
-    required this.amountLabel,
-    required this.onBack,
-    required this.onNext,
-  });
-
-  final TextEditingController controller;
-  final String amountLabel;
-  final VoidCallback onBack;
-  final VoidCallback onNext;
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Semantics(
-          textField: true,
-          label: 'Amount in Naira',
-          hint: 'Enter amount to send',
-          child: TextField(
-            controller: controller,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            decoration: InputDecoration(
-              labelText: '$amountLabel (₦)',
-              hintText: '1500.75',
-              border: const OutlineInputBorder(),
-              prefixText: '₦ ',
-            ),
-          ),
-        ),
-        const Spacer(),
-        Row(
-          children: [
-            Expanded(
-              child: Semantics(
-                button: true,
-                label: 'Back to recipient',
-                hint: 'Double tap to go back',
-                child: OutlinedButton(
-                  onPressed: onBack,
-                  child: Text(l10n.back),
-                ),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Semantics(
-                button: true,
-                label: 'Continue to confirm',
-                hint: 'Double tap to review transfer',
-                child: FilledButton(
-                  key: const Key('send_next_amount'),
-                  onPressed: onNext,
-                  child: Text(l10n.next),
-                ),
-              ),
-            ),
-          ],
         ),
       ],
     );
