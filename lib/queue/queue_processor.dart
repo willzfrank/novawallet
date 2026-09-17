@@ -1,4 +1,3 @@
-import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
@@ -38,22 +37,17 @@ class QueueProcessor extends _$QueueProcessor {
 
   @override
   int build() {
-    // Spec: ref.listen connectivityProvider → auto-process when back online.
-    ref.listen<AsyncValue<List<ConnectivityResult>>>(
-      connectivityProvider,
-      (prev, next) {
-        next.whenData((results) {
-          final online = results.isNotEmpty &&
-              !results.every((r) => r == ConnectivityResult.none);
-          final wasOffline = prev?.asData?.value.every(
-                (r) => r == ConnectivityResult.none,
-              ) ??
-              false;
-          if (online && (wasOffline || prev == null)) {
-            processPending();
-          }
-        });
+    // Drain as soon as we flip offline → online (same signal as Offline chip).
+    // Listening to connectivity AsyncValue was brittle: prev=AsyncLoading or
+    // empty-link shapes skipped the wasOffline check → pending sat until pull.
+    ref.listen<bool>(
+      isOnlineProvider,
+      (wasOnline, online) {
+        if (online && wasOnline != true) {
+          processPending();
+        }
       },
+      fireImmediately: true,
     );
 
     final storage = ref.watch(appStorageProvider);
@@ -152,6 +146,10 @@ class QueueProcessor extends _$QueueProcessor {
   }
 
   Future<void> processPending() async {
+    // MockApi is in-process — without this gate, "offline" still succeeds.
+    if (!ref.read(isOnlineProvider)) {
+      return;
+    }
     if (_processing) {
       _rerunRequested = true;
       return;
@@ -160,6 +158,9 @@ class QueueProcessor extends _$QueueProcessor {
     try {
       do {
         _rerunRequested = false;
+        if (!ref.read(isOnlineProvider)) {
+          break;
+        }
         final storage = ref.read(appStorageProvider);
         final api = ref.read(mockApiProvider);
 
@@ -169,6 +170,9 @@ class QueueProcessor extends _$QueueProcessor {
           ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
 
         for (var action in pending) {
+          if (!ref.read(isOnlineProvider)) {
+            break;
+          }
           // Hive local puts are applied synchronously; avoid awaiting Futures
           // that can stall under Flutter test fake-async.
           storage.queueBox.put(
@@ -179,6 +183,14 @@ class QueueProcessor extends _$QueueProcessor {
 
           // Exhaust network retries for this action within one drain pass.
           while (true) {
+            if (!ref.read(isOnlineProvider)) {
+              storage.queueBox.put(
+                action.id,
+                action.copyWith(status: 'pending'),
+              );
+              refreshCount();
+              return;
+            }
             final ApiResult result;
             if (action.type == 'send') {
               result = await api.sendMoney(action.payload, action.id);

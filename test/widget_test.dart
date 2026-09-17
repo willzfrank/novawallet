@@ -78,7 +78,7 @@ void main() {
     await tester.pump();
 
     expect(find.textContaining('Step 3/3'), findsOneWidget);
-    expect(find.textContaining('Idempotency key'), findsOneWidget);
+    expect(find.textContaining('Reference id'), findsOneWidget);
     expect(find.byKey(const Key('send_confirm')), findsOneWidget);
 
     await tester.runAsync(() async {

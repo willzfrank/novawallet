@@ -12,6 +12,13 @@ void main() {
       expect(Money.formatKobo(150075), contains('1,500.75'));
     });
 
+    test('formatNairaTyping adds grouping commas', () {
+      expect(Money.formatNairaTyping('2000'), '2,000');
+      expect(Money.formatNairaTyping('2000.5'), '2,000.5');
+      expect(Money.formatNairaTyping('2000.'), '2,000.');
+      expect(Money.formatNairaTyping('1,500.75'), '1,500.75');
+    });
+
     test('rejects invalid', () {
       expect(Money.nairaStringToKobo('abc'), isNull);
       expect(Money.nairaStringToKobo('12.345'), isNull);

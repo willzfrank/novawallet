@@ -3,6 +3,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../core/locale/locale_provider.dart';
 import '../../core/money/money.dart';
+import '../../core/network/connectivity_provider.dart';
 import '../../l10n/app_localizations.dart';
 import '../../models/transaction.dart';
 import '../../queue/queue_processor.dart';
@@ -19,6 +20,7 @@ class WalletHomeScreen extends ConsumerWidget {
     final l10n = AppLocalizations.of(context)!;
     final walletAsync = ref.watch(walletProvider);
     final pendingCount = ref.watch(queueProcessorProvider);
+    final online = ref.watch(isOnlineProvider);
     final processor = ref.read(queueProcessorProvider.notifier);
     final deadCount = processor.deadCount();
     final deadReason = processor.firstDeadFailureReason();
@@ -27,14 +29,36 @@ class WalletHomeScreen extends ConsumerWidget {
       appBar: AppBar(
         title: Text(l10n.walletHome),
         actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 4),
+            child: Chip(
+              avatar: Icon(
+                online ? Icons.cloud_done_outlined : Icons.cloud_off_outlined,
+                size: 18,
+              ),
+              label: Text(online ? l10n.online : l10n.offline),
+            ),
+          ),
           Semantics(
             button: true,
             label: 'Toggle language',
             hint: 'Double tap to switch between English and Yoruba',
             child: IconButton(
               key: const Key('locale_toggle'),
+              tooltip: 'Language: English / Yoruba',
               icon: const Icon(Icons.language),
-              onPressed: () => ref.read(localeProvider.notifier).toggle(),
+              onPressed: () {
+                final next = ref.read(localeProvider).languageCode == 'en'
+                    ? 'Yoruba'
+                    : 'English';
+                ref.read(localeProvider.notifier).toggle();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Language: $next'),
+                    duration: const Duration(seconds: 1),
+                  ),
+                );
+              },
             ),
           ),
           if (pendingCount > 0)

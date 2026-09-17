@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../core/money/money.dart';
 import '../../l10n/app_localizations.dart';
 
-/// Amount step with live ₦ preview (validate only on Next).
+/// Amount step — commas live in the field (validate only on Next).
 class SendAmountScreen extends StatefulHookConsumerWidget {
   const SendAmountScreen({
     super.key,
@@ -28,11 +29,10 @@ class _SendAmountScreenState extends ConsumerState<SendAmountScreen> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    final controller = useTextEditingController(text: widget.initialText);
-    useListenable(controller);
-
-    final kobo = Money.nairaStringToKobo(controller.text);
-    final preview = kobo == null ? null : Money.formatKobo(kobo);
+    final seed = widget.initialText.isEmpty
+        ? ''
+        : Money.formatNairaTyping(widget.initialText);
+    final controller = useTextEditingController(text: seed);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -44,26 +44,15 @@ class _SendAmountScreenState extends ConsumerState<SendAmountScreen> {
           child: TextField(
             controller: controller,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            inputFormatters: const [_NairaThousandsFormatter()],
             decoration: InputDecoration(
               labelText: '${widget.amountLabel} (₦)',
-              hintText: '1500.75',
+              hintText: '1,500.75',
               border: const OutlineInputBorder(),
               prefixText: '₦ ',
             ),
           ),
         ),
-        if (preview != null) ...[
-          const SizedBox(height: 12),
-          Semantics(
-            label: 'Amount preview: $preview',
-            child: Text(
-              preview,
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    color: Theme.of(context).colorScheme.primary,
-                  ),
-            ),
-          ),
-        ],
         const Spacer(),
         Row(
           children: [
@@ -94,6 +83,22 @@ class _SendAmountScreenState extends ConsumerState<SendAmountScreen> {
           ],
         ),
       ],
+    );
+  }
+}
+
+class _NairaThousandsFormatter extends TextInputFormatter {
+  const _NairaThousandsFormatter();
+
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    final formatted = Money.formatNairaTyping(newValue.text);
+    return TextEditingValue(
+      text: formatted,
+      selection: TextSelection.collapsed(offset: formatted.length),
     );
   }
 }

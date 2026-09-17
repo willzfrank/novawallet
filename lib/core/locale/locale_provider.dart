@@ -18,7 +18,7 @@ class LocaleController extends Notifier<Locale> {
 
   Future<void> toggle() async {
     final next = state.languageCode == 'en' ? 'yo' : 'en';
-    await ref.read(appStorageProvider).metaBox.put(kLocaleKey, next);
     state = Locale(next);
+    await ref.read(appStorageProvider).metaBox.put(kLocaleKey, next);
   }
 }

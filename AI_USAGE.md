@@ -40,3 +40,12 @@ Early mock API sketch only delayed and returned `true` — no idempotency set. A
 
 ### 7. Retry count as boolean
 AI suggested storing retry count as a boolean (`hasRetried`) — caught this as it prevents implementing configurable max retry limits; fixed by using `int retryCount` with a threshold constant.
+
+### 8. Biometric stuck / no system prompt
+`MainActivity` left as `FlutterActivity`. `local_auth` on Android needs `FlutterFragmentActivity` for the system biometric sheet. Auth failed inside an empty `catch` → returned `false` → snackbar “Authentication required to proceed” with no prompt. Fixed by switching `MainActivity` to `FlutterFragmentActivity`.
+
+### 9. Offline still “succeeds”
+`MockApiService` is in-process (no real HTTP). AI drained the queue whenever connectivity said “link up,” defaulted `isOnline` to `true` while loading, and called `processPending()` on app resume / pull-to-refresh without an online gate — so airplane-mode / “offline” sends still completed instantly. Fixed by seeding connectivity with `checkConnectivity()`, defaulting unknown → offline, and no-oping `processPending` (and resume flush) when `isOnline` is false.
+
+### 10. Yoruba locale → red screen
+Globe toggles `en` ↔ `yo`. AI set `MaterialApp.locale` to `yo` with only `GlobalMaterialLocalizations` — Flutter has no Material/Cupertino catalog for Yoruba → `No MaterialLocalizations found` on `AppBar`. Fixed with fallback delegates that load English Material/Widgets/Cupertino strings when the locale isn’t supported, while `AppLocalizations` still serves Yoruba UI copy.

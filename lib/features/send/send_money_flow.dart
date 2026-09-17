@@ -330,7 +330,7 @@ class _StepConfirm extends StatelessWidget {
           subtitle: Text(formatted),
         ),
         ListTile(
-          title: const Text('Idempotency key (debug)'),
+          title: const Text('Reference id'),
           subtitle: Text(
             idempotencyKey ?? '—',
             style: Theme.of(context).textTheme.bodySmall,
