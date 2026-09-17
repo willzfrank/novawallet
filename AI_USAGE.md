@@ -34,3 +34,6 @@ AI assumed `dart run build_runner` would emit `.g.dart`. Analyzer/SDK mismatch (
 
 ### 5. Duplicate / silent double-send risk in mock API
 Early mock API sketch only delayed and returned `true` — no idempotency set. A reconnect replay with the same UUID could debit twice if side effects weren’t keyed. Fixed: `MockApiService` tracks processed UUID keys; duplicates return success without re-applying wallet/goal side effects.
+
+### 6. Misleading `processAttempts` comment
+`MockApiService` comment said `processAttempts` increments on first success only — code actually increments on every non-duplicate attempt including failures. Caught it by reading the implementation, not the comment. Fixed by clarifying the comment.

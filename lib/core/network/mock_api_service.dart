@@ -15,7 +15,7 @@ class MockApiService {
   /// Keys already successfully processed (idempotency store).
   final Set<String> processedKeys = {};
 
-  /// Count of times each key was accepted for processing (first success only increments once).
+  /// Count of non-duplicate attempts per key (increments on failures too; duplicates skip).
   final Map<String, int> processAttempts = {};
 
   int get uniqueProcessedCount => processedKeys.length;

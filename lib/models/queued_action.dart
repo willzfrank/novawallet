@@ -13,7 +13,7 @@ class QueuedAction {
   final String id;
   final String type; // 'send' | 'contribute'
   final Map<String, dynamic> payload;
-  String status; // 'pending' | 'processing' | 'completed'
+  final String status; // 'pending' | 'processing' | 'completed'
   final DateTime createdAt;
 
   QueuedAction copyWith({

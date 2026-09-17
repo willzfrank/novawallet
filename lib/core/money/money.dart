@@ -4,14 +4,11 @@ import 'package:intl/intl.dart';
 class Money {
   Money._();
 
-  static final NumberFormat _ngn = NumberFormat.currency(
-    locale: 'en_NG',
-    symbol: '₦',
-  );
+  static final NumberFormat _amount = NumberFormat('#,##0.00', 'en');
 
   /// Format kobo int for display. Only place that divides by 100.
   static String formatKobo(int koboAmount) {
-    return _ngn.format(koboAmount / 100);
+    return '₦${_amount.format(koboAmount / 100)}';
   }
 
   /// Parse Naira string (e.g. "1500.75") → kobo int. Rejects invalid input.

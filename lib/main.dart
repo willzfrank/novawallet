@@ -21,8 +21,34 @@ Future<void> main() async {
   );
 }
 
-class NovaWalletApp extends StatelessWidget {
+class NovaWalletApp extends ConsumerStatefulWidget {
   const NovaWalletApp({super.key});
+
+  @override
+  ConsumerState<NovaWalletApp> createState() => _NovaWalletAppState();
+}
+
+class _NovaWalletAppState extends ConsumerState<NovaWalletApp>
+    with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Simulator connectivity can lag; flush queue on foreground as fallback.
+    if (state == AppLifecycleState.resumed) {
+      ref.read(queueProcessorProvider.notifier).processPending();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {

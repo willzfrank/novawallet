@@ -86,3 +86,4 @@ Why Riverpod over Bloc/GetX:
 - Contacts are mock strings; no bank account validation
 - `SliverChildBuilderDelegate` / `ListView.builder` used for lists (lazy)
 - macOS/iOS need secure storage entitlements (Flutter plugin defaults)
+- Connectivity events on iOS Simulator can lag; app foreground resume (`AppLifecycleState.resumed`) triggers a queue flush as a fallback. Physical device recommended for offline demo.
